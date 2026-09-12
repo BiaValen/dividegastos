@@ -914,7 +914,7 @@ async function start(){
 function signOut(){
   setSession(null);HH=null;unlocked=false;
   clearInterval(pollT);pollT=null;
-  state=DEFAULTS();
+  state=DEFAULTS();renderAll();
   document.getElementById("lock-input").value="";
   document.getElementById("lock").hidden=false;
 }

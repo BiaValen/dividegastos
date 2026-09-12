@@ -1,3 +1,6 @@
 .DS_Store
 Thumbs.db
 .vercel/
+
+# backups têm os gastos de vocês — repositório é público, não sobem
+backup-*.json

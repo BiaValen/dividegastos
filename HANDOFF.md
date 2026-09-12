@@ -138,7 +138,9 @@ O selo indica a origem: "Pago · mês · pelas semanas" ou "Pago · tudo · pelo
 
 ### Configuração no painel
 - Authentication → Sign In / Providers → **Email** habilitado, e **"Allow new users to sign up" desligado** (ninguém cria conta sozinho).
-- Authentication → Users → Add user, com **"Auto Confirm User"** marcado, para cada pessoa do casal.
+- Authentication → Users → **Add user → Create new user**, informando e-mail + senha e marcando **"Auto Confirm User"**.
+- **Não use "Invite user"**: o link do convite aponta para a Site URL do projeto (por padrão `localhost`) e o app não tem tela para receber convite nem definir senha. Contas se criam à mão, com senha, e a senha se troca pelo painel.
+- Toda vez que um usuário for criado ou recriado, rode de novo o PASSO 3 do `supabase-setup.sql` — ele liga as contas ao `household`. Sem isso a pessoa loga mas vê "Esta conta não tem acesso aos dados do casal".
 
 ### Tabelas e RLS
 Tudo em `supabase-setup.sql`, em 5 passos numerados. Resumo:

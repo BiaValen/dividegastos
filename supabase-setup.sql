@@ -83,25 +83,37 @@ create policy paid_all on paid for all to authenticated
 
 
 -- ------------------------------------------------------------
--- PASSO 3 — Criar o grupo e ligar as duas contas
+-- PASSO 3 — Criar o grupo e ligar as contas
 --
--- ANTES de rodar este passo, crie os dois usuários no painel:
---   Authentication -> Users -> Add user
---   (marque "Auto Confirm User" para não depender de e-mail)
+-- ANTES de rodar este passo, crie os usuários no painel:
+--   Authentication -> Users -> Add user -> Create new user
+--   Informe e-mail + senha e marque "Auto Confirm User".
+--   NÃO use "Invite user": o link do e-mail aponta para um endereço
+--   que não existe e o app não tem tela para receber convite.
 --
--- Troque os dois e-mails abaixo pelos que você criou.
+-- Este bloco não pede e-mail nenhum: ele liga TODAS as contas do projeto
+-- ao grupo. Isso é seguro porque o cadastro público está desligado, então
+-- as únicas contas que existem são as que você criou à mão.
+-- Rode de novo sempre que criar ou recriar um usuário.
 -- ------------------------------------------------------------
-with h as (
-  insert into household(name) values ('Casal') returning id
+insert into household(name)
+select 'Casal' where not exists (select 1 from household);
+
+with alvo as (
+  select coalesce(
+    (select household_id from trip group by household_id order by count(*) desc limit 1),
+    (select id from household order by id limit 1)
+  ) as id
 )
 insert into household_member(household_id, user_id)
-select h.id, u.id
-from h, auth.users u
-where u.email in ('TROQUE1@exemplo.com', 'TROQUE2@exemplo.com');
+select alvo.id, u.id from alvo, auth.users u
+on conflict do nothing;
 
--- Confira: deve devolver 2 linhas, uma pra cada e-mail.
+-- Confira: todo e-mail precisa ter um household_id preenchido.
+-- Se algum vier vazio, essa pessoa verá "Esta conta não tem acesso aos
+-- dados do casal" ao entrar.
 select u.email, m.household_id
-from household_member m join auth.users u on u.id = m.user_id;
+from auth.users u left join household_member m on m.user_id = u.id;
 
 
 -- ------------------------------------------------------------

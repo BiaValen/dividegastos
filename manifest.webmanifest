@@ -1,0 +1,12 @@
+{
+  "name": "Divisão de viagem",
+  "short_name": "Viagem",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#E8EBEF",
+  "theme_color": "#2C55E0",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

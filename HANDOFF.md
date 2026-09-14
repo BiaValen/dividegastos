@@ -33,7 +33,7 @@ Este documento descreve o estado atual do app, as decisões, os problemas já re
 - **Aba Análise**: gasto por mês (barras), categorias empilhadas por mês, e comparativo mês-a-mês por categoria com variação %.
 - **Backup**: exportar (copia o JSON do estado) e importar (cola um JSON e substitui).
 - **Confirmações e avisos próprios** (modal + toast), porque `confirm()`/`alert()` nativos são bloqueados no sandbox do artifact.
-- **Login** por e-mail/senha (Supabase Auth) e botão Sair. Ver seção 9.
+- **Login** por e-mail/senha (Supabase Auth), com olhinho de mostrar/ocultar senha, e botão Sair. Ver seção 9.
 
 ---
 
@@ -171,7 +171,7 @@ Tudo em `supabase-setup.sql`, em 5 passos numerados. Resumo:
 ## 10. Problemas já resolvidos (para não repetir)
 
 - **`confirm()`/`alert()` nativos são bloqueados no sandbox** do artifact → botões "Apagar tudo" e "excluir viagem" pareciam não funcionar. Substituídos por `confirmBox()` (modal próprio, Promise) e `toast()`.
-- **CSS vencendo o atributo `hidden`**: `.modal{display:grid}` sobrepunha o `hidden`, deixando o modal invisível cobrindo a tela e engolindo todos os cliques ("nenhum botão funciona"). Corrigido com regras `[hidden]{display:none}` para `.modal`, `.toast` e `.vx`. **Atenção**: qualquer elemento que use o atributo `hidden` e também tenha `display` no CSS precisa de `.classe[hidden]{display:none}`.
+- **CSS vencendo o atributo `hidden`**: `.modal{display:grid}` sobrepunha o `hidden`, deixando o modal invisível cobrindo a tela e engolindo todos os cliques ("nenhum botão funciona"). Corrigido com regras `[hidden]{display:none}` para `.modal`, `.toast` e `.vx`. **Atenção**: qualquer elemento que use o atributo `hidden` e também tenha `display` no CSS precisa de `.classe[hidden]{display:none}`. O mesmo vale para **SVG inline**: `hidden` não faz nada em elementos SVG (o navegador só aplica em elementos HTML), então os olhinhos do login têm `.pw-eye svg[hidden]{display:none}`.
 - **Dados "sumiram"** ao trocar armazenamento pessoal → compartilhado: os dados não sumiram, ficaram no armazenamento pessoal. `load()` faz fallback + migração. Depois migramos de vez para o Supabase.
 - **Combustível** deixou de ser valor digitado e passou a ser calculado por km/consumo/preço.
 

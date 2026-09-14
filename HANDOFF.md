@@ -15,6 +15,7 @@ Este documento descreve o estado atual do app, as decisões, os problemas já re
 - Publicar: é site estático puro. Repositório Git na pasta → GitHub → importar no Vercel (deploy automático a cada push). Netlify/GitHub Pages funcionam igual.
 - **Não depende** de rodar dentro do Claude. Funciona em qualquer host estático.
 - O setup do banco está em `supabase-setup.sql` — passos numerados pra rodar no SQL Editor.
+- Ícone: na aba é um SVG embutido no `<head>`; para atalho na tela inicial do celular existem `icon-180.png` (iOS), `icon-192/512.png` + `manifest.webmanifest` (Android). Os PNGs são quadrados inteiros — cada sistema arredonda por conta própria. Para regenerar, é o mesmo desenho do SVG (coração + duas rodinhas em `#2C55E0`/`#DE8410`/branco).
 
 ---
 

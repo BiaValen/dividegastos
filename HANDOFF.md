@@ -58,6 +58,8 @@ Este documento descreve o estado atual do app, as decisões, os problemas já re
 
 ## 4. Modelo de dados (`state`)
 
+Despesa de combustível pode ter dois campos a mais, opcionais: `tank` (R$ abastecido no posto) e `keeper` (id da pessoa com quem fica a sobra). Regra: `sobra = max(tank − amount, 0)`; se `keeper ≠ payer`, o `keeper` deve a sobra **inteira** ao `payer`, fora da divisão. Se `keeper = payer`, não há acerto (era o carro de quem pagou). O `amount` continua sendo só o consumo da viagem, e é o que entra no total, na divisão e na Análise; a sobra aparece à parte no topo ("+ R$ X de sobra de tanque, sem dividir") e no "pagou" de quem abasteceu. Motivo: eles enchem o tanque antes de viajar, só sabem o consumo real depois, e o que sobra no tanque fica com o dono do carro — que varia conforme quem paga. Ver `compute()`, `leftoverOf`, `leftoverDebt`.
+
 Em memória o formato continua exatamente o mesmo de antes. O que mudou é **onde ele fica**: não é mais um blob único, e sim linhas nas tabelas `trip`, `settings` e `paid` (ver seção 5). `fromRows()` remonta este objeto na leitura. Cache local sob a chave `"divisor-viagem-v2"`; a sessão fica em `"divisor-viagem-session"`.
 
 ```js

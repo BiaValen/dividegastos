@@ -4,3 +4,5 @@ Thumbs.db
 
 # backups têm os gastos de vocês — repositório é público, não sobem
 backup-*.json
+.claude/
+_preview.html

@@ -689,7 +689,7 @@ const fuelFields=v=>`
     <label class="field"><span>Média km/L</span><input class="f-kpl" inputmode="decimal" placeholder="depois da viagem" value="${esc(inval(v.kmPerL))}"></label>
   </div>
   <div class="readout idle"><span class="k">custo</span><span class="liters"></span><span class="cost">—</span></div>
-  <label class="field"><span>Sobra fica com</span><select class="f-keeper">${peopleOpts(v.keeper)}</select></label>
+  <label class="field"><span>Gasolina que sobrar fica no carro de</span><select class="f-keeper">${peopleOpts(v.keeper)}</select></label>
   <div class="readout sobra-ro" hidden><span class="k">sobra</span><span class="liters who"></span><span class="cost"></span></div>`;
 
 const flatFields=v=>{

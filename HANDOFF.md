@@ -68,6 +68,17 @@ A despesa de combustível é lançada em dois momentos, porque é assim que a in
 
 `keeper` é o id de quem fica com a sobra (o dono do carro). Regra: `sobra = max(tank − amount, 0)`; se `keeper ≠ payer`, o `keeper` deve a sobra **inteira** ao `payer`, fora da divisão. Se `keeper = payer`, não há acerto. O `amount` é só o consumo da viagem, e é o que entra no total, na divisão e na Análise; a sobra aparece à parte no topo ("+ R$ X de sobra de tanque, sem dividir") e no "pagou" de quem abasteceu. Ver `compute()`, `leftoverOf`, `leftoverDebt`.
 
+### Acerto: em aberto vs. quem pagou o quê
+O bloco do topo mostra duas coisas diferentes, e confundi-las já foi bug:
+
+- **"em aberto"** (destaque) = `settleUp` só sobre as viagens **não acertadas** — `trips.filter(t=>!tripSettled(t))`. É a resposta para "alguém precisa pagar alguém agora?". Antes o acerto somava tudo desde sempre e ignorava os períodos já marcados como pagos, então em "Tudo" ele repetia dívidas já quitadas.
+- **"quem pagou o quê, no período todo"** (menor, discreto) = o saldo sobre **todas** as viagens do período, acertadas ou não. É o histórico de quem desembolsou mais.
+- `already` = soma do que já foi acertado no período, mostrado como "R$ X já acertados".
+
+`tripSettled(t)` olha semana, mês (`isMonthPaid`) e a chave `"all"`. Para `"all"` só valem viagens com data ≤ `at`, senão toda viagem nova nasceria quitada.
+
+**Cuidado:** a barra "✓ Pago … desfazer" fica **fora** do `if(tr.length===0)`. Quando um período está todo acertado o "em aberto" fica vazio, e se a barra estivesse dentro do `else` não haveria como desmarcar o pagamento.
+
 ### Editar despesas
 `editing` guarda `"idViagem:idDespesa"` da despesa aberta. `renderTrips()` troca a linha por um formulário com os mesmos campos (`fuelFields`/`flatFields`, reaproveitados do formulário de nova despesa), com Cancelar e Salvar. O `<div>` de edição também tem a classe `addwrap` de propósito: é ela que `updateReadout`, `updateFlatSum` e os botões `+ valor` procuram com `closest(".addwrap")`, então o cálculo ao vivo funciona na edição de graça. `readExpense(wrap, kind)` é a leitura compartilhada entre adicionar e salvar.
 

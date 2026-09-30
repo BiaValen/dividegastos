@@ -72,19 +72,21 @@
     color:var(--primary);margin:3px 0 2px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
   }
   .cluster .split-note{color:var(--faint);font-size:.8rem;margin:0 0 14px;min-height:1em}
-  .acerto-line{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--line-soft);font-size:.96rem}
+  .acerto-cap{color:var(--faint);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .acerto-line{display:flex;align-items:center;gap:8px;padding:6px 0 10px;font-size:1.02rem}
+  .settled-note{color:var(--faint);font-size:.78rem;margin:-4px 0 10px}
   .acerto-line .arrow{color:var(--faint);font-size:.82rem}
   .acerto-line .who{font-weight:600}
   .acerto-line .amt{margin-left:auto;color:var(--primary);font-weight:700}
   .acerto-empty{color:var(--faint);font-size:.9rem;padding-top:14px;border-top:1px solid var(--line-soft)}
   .acerto-quits{display:flex;align-items:center;gap:8px;color:var(--pos);font-weight:600;padding-top:14px;border-top:1px solid var(--line-soft)}
   .dot{width:7px;height:7px;border-radius:50%;background:var(--pos)}
-  .bd{margin:4px 0 2px}
-  .bd-row{display:flex;align-items:baseline;gap:8px;padding:9px 0 0;border-top:1px solid var(--line-soft);font-size:.92rem}
-  .bd-row:first-child{border-top:none}
+  .bd{margin:2px 0 2px}
+  .bd-cap{color:var(--faint);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;padding-top:12px;border-top:1px solid var(--line-soft)}
+  .bd-row{display:flex;align-items:baseline;gap:8px;padding:5px 0 0;font-size:.82rem}
   .bd-n{font-weight:600}
-  .bd-paid{color:var(--muted);font-size:.84rem}
-  .bd-bal{margin-left:auto;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:.9rem}
+  .bd-paid{color:var(--muted);font-size:.76rem}
+  .bd-bal{margin-left:auto;font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:.8rem}
   .bd-bal.pos{color:var(--pos)}
   .bd-bal.neg{color:var(--neg)}
   .bd-bal.neu{color:var(--muted)}
@@ -581,6 +583,16 @@ const fmtBR=iso=>{const [y,mo,d]=iso.split("-");return d+"/"+mo;};
 const monthKeyOf=ref=>ref.getFullYear()+"-"+String(ref.getMonth()+1).padStart(2,"0");
 function weeksOfMonthKey(mk){const set=new Set();state.trips.forEach(t=>{if(t.dateISO&&t.dateISO.slice(0,7)===mk)set.add(toISO(startOfWeek(new Date(t.dateISO+"T00:00:00"))));});return [...set];}
 function isMonthPaid(mk){if(state.paid["month:"+mk])return true;const w=weeksOfMonthKey(mk);return w.length>0&&w.every(x=>state.paid["week:"+x]);}
+// uma viagem já foi acertada se a semana ou o mês dela estão marcados como pagos.
+// "all" também conta, mas só para o que já existia quando foi marcado — senão toda
+// viagem nova nasceria quitada.
+function tripSettled(t){
+  if(!t.dateISO)return false;
+  const all=state.paid["all"];
+  if(all&&(!all.at||t.dateISO<=all.at))return true;
+  if(state.paid["week:"+toISO(startOfWeek(new Date(t.dateISO+"T00:00:00")))])return true;
+  return isMonthPaid(t.dateISO.slice(0,7));
+}
 function paidStatus(){
   const k=periodKey(),rec=state.paid[k];
   if(rec)return {paid:true,explicit:true,at:rec.at};
@@ -626,7 +638,10 @@ function settleUp(net){
 /* ---------- Render ---------- */
 function renderCluster(){
   const trips=tripsInPeriod();
-  const {total,perHead,net,leftover,pending}=compute(trips);const tr=settleUp(net);
+  const {total,perHead,net,leftover,pending}=compute(trips);
+  // o acerto mostra só o que ainda não foi pago; o "pagou / saldo" abaixo continua sobre o período inteiro
+  const tr=settleUp(compute(trips.filter(t=>!tripSettled(t))).net);
+  const already=settleUp(compute(trips.filter(tripSettled)).net).reduce((s,x)=>s+x.amount,0);
   let h=`<div class="seg pseg">
       <button data-period="all" class="${period.mode==='all'?'on':''}">Tudo</button>
       <button data-period="month" class="${period.mode==='month'?'on':''}">Mês</button>
@@ -643,7 +658,7 @@ function renderCluster(){
     h+=`<div class="warnbar">${pending===1?"1 abastecimento ainda sem km e média":pending+" abastecimentos ainda sem km e média"} — o acerto muda quando preencher.</div>`;
   }
   if(total>0&&state.people.length>1){
-    h+=`<div class="bd">`+net.map(p=>{
+    h+=`<div class="bd"><div class="bd-cap">quem pagou o quê, no período todo</div>`+net.map(p=>{
       const s=p.net,cls=Math.abs(s)<.005?"neu":(s>0?"pos":"neg");
       const bal=Math.abs(s)<.005?"quite":(s>0?"+":"−")+money.format(Math.abs(s));
       return `<div class="bd-row"><span class="bd-n">${esc(p.name)}</span><span class="bd-paid">pagou ${money.format(p.paid)}</span><span class="bd-bal ${cls}">${bal}</span></div>`;
@@ -651,15 +666,20 @@ function renderCluster(){
   }
   const pkey=periodKey(),ps=paidStatus();
   if(total<=0){h+=`<div class="acerto-empty">${period.mode==='all'?'Sem gastos ainda. Crie uma viagem para começar.':'Nenhuma despesa neste período.'}</div>`;}
-  else if(tr.length===0){h+=`<div class="acerto-quits"><span class="dot"></span> Está quitado — ninguém deve nada.</div>`;}
   else{
-    h+=`<div class="acerto ${ps.paid?'is-paid':''}">`+tr.map(x=>`<div class="acerto-line"><span class="who">${esc(x.from)}</span><span class="arrow">paga</span><span class="who">${esc(x.to)}</span><span class="amt num">${money.format(x.amount)}</span></div>`).join("")+`</div>`;
+    if(tr.length===0){
+      h+=`<div class="acerto-quits"><span class="dot"></span> ${already>0?'Tudo acertado — nada em aberto.':'Está quitado — ninguém deve nada.'}</div>`;
+    }else{
+      h+=`<div class="acerto ${ps.paid?'is-paid':''}"><div class="acerto-cap">em aberto</div>`+tr.map(x=>`<div class="acerto-line"><span class="who">${esc(x.from)}</span><span class="arrow">paga</span><span class="who">${esc(x.to)}</span><span class="amt num">${money.format(x.amount)}</span></div>`).join("")+`</div>`;
+      if(already>0)h+=`<div class="settled-note">${money.format(already)} já acertados neste período</div>`;
+    }
+    // a barra de pago fica fora do if acima: sem ela, um período quitado não teria como ser desmarcado
     if(ps.paid&&ps.explicit){
       h+=`<div class="paidbar"><span class="pchk">✓</span> Pago · ${scopeLabel()}${ps.at?` <span class="pdate">em ${fmtBR(ps.at)}</span>`:''}<button class="pundo" data-paid-undo="${pkey}">desfazer</button></div>`;
     }else if(ps.paid){
       const dn=period.mode==='all'?'pelos meses':'pelas semanas';
       h+=`<div class="paidbar"><span class="pchk">✓</span> Pago · ${scopeLabel()} <span class="pdate">${dn}</span></div>`;
-    }else{
+    }else if(tr.length>0){
       h+=`<button class="paidbtn" data-paid="${pkey}">Marcar como pago</button>`;
     }
   }
@@ -689,7 +709,7 @@ const fuelFields=v=>`
     <label class="field"><span>Média km/L</span><input class="f-kpl" inputmode="decimal" placeholder="depois da viagem" value="${esc(inval(v.kmPerL))}"></label>
   </div>
   <div class="readout idle"><span class="k">custo</span><span class="liters"></span><span class="cost">—</span></div>
-  <label class="field"><span>Gasolina que sobrar fica no carro de</span><select class="f-keeper">${peopleOpts(v.keeper)}</select></label>
+  <div class="row"><label class="field"><span>Gasolina que sobrar fica no carro de</span><select class="f-keeper">${peopleOpts(v.keeper)}</select></label></div>
   <div class="readout sobra-ro" hidden><span class="k">sobra</span><span class="liters who"></span><span class="cost"></span></div>`;
 
 const flatFields=v=>{

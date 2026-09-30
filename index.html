@@ -532,9 +532,16 @@ const timers={};
 const pendingWrites=()=>Object.keys(timers).length>0;
 function debounce(key,fn){clearTimeout(timers[key]);timers[key]=setTimeout(()=>{delete timers[key];fn();},400);}
 
+// enquanto houver rascunho na tela, a sincronização espera: re-renderizar apagaria o que
+// a pessoa está preenchendo. O activeElement sozinho não basta — com o seletor de data ou
+// de opções aberto no celular ele volta a ser o BODY.
+function hasDraft(){
+  if(editing)return true;
+  return [...document.querySelectorAll(".addwrap .f-tank,.addwrap .f-liters,.addwrap .f-km,.addwrap .f-val")].some(i=>i.value.trim()!=="");
+}
 let pollT=null;
 async function reloadFromStore(){
-  if(!unlocked||!session||pendingWrites())return;
+  if(!unlocked||!session||pendingWrites()||hasDraft())return;
   const ae=document.activeElement;
   if(ae&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName))return; // não atrapalhar quem está digitando
   try{

@@ -180,8 +180,14 @@
   .exp .cat{font-weight:600;font-size:.95rem}
   .exp .meta{color:var(--muted);font-size:.79rem;margin-top:1px}
   .exp .val{margin-left:auto;font-weight:600;font-size:.98rem;white-space:nowrap}
-  .exp .del{border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;width:26px;height:26px;border-radius:8px;flex:none;transition:.25s var(--ease)}
+  .exp .del,.exp .ed{border:none;background:transparent;color:var(--faint);cursor:pointer;font-size:16px;width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;transition:.25s var(--ease)}
   .exp .del:hover{background:rgba(217,87,63,.12);color:var(--neg)}
+  .exp .ed:hover{background:var(--primary-wash);color:var(--primary)}
+  .exp .val{margin-left:auto}
+  .exp.is-pend .val{color:var(--faint)}
+  .exp .meta.pend{color:var(--neg);font-weight:600}
+  .editwrap{background:var(--field);border:1px solid var(--line);border-radius:var(--r-out);padding:14px;margin:12px 0}
+  .warnbar{background:rgba(222,132,16,.1);color:var(--warm);font-size:.82rem;font-weight:600;border-radius:var(--r-field);padding:9px 12px;margin:0 0 12px}
   .exp-empty{color:var(--faint);font-size:.88rem;padding:8px 0 2px}
 
   /* form de despesa */
@@ -377,7 +383,7 @@ const uid=()=>Math.random().toString(36).slice(2,9);
 const DEFAULTS=()=>({
   people:[{id:uid(),name:"Eu"},{id:uid(),name:"Namorado"}],
   cats:["Combustível","Pedágio","Estacionamento"],
-  lastFuel:{kmPerL:"",pricePerL:""},
+  lastFuel:{kmPerL:""},
   paid:{},
   trips:[]
 });
@@ -385,6 +391,7 @@ let state=DEFAULTS();
 const mode={};      // fuel|flat por viagem
 const openMap={};   // sanfona: aberto?
 let view="trips";   // aba ativa
+let editing=null;   // "idViagem:idDespesa" da despesa aberta para edição
 let unlocked=false;
 const isOpen=id=>openMap[id]!==false;
 
@@ -538,6 +545,10 @@ async function reloadFromStore(){
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const num=v=>{const n=parseFloat(String(v).trim().replace(",","."));return isNaN(n)?null:n;};
 const brl=v=>{const n=parseFloat(String(v).replace(/\s/g,"").replace(/\./g,"").replace(",","."));return isNaN(n)?null:n;};
+// preço do litro sai do que foi pago dividido pelos litros, porque os descontos do posto mudam esse valor a cada abastecida
+const pricePerLOf=e=>(e.tank>0&&e.liters>0)?e.tank/e.liters:(e.pricePerL||0);
+// km e média só são conhecidos depois da viagem; até lá a despesa fica pendente e não tem custo
+const fuelPending=e=>e.type==="fuel"&&!(e.km>0&&e.kmPerL>0);
 const fuelCost=(km,kpl,ppl)=>(kpl>0)?(km/kpl)*ppl:0;
 // sobra do tanque: o que foi abastecido além do que a viagem consumiu; fica no carro de quem guarda, e é devida inteira a quem pagou
 const leftoverOf=e=>(e.type==="fuel"&&e.tank>0)?Math.max(e.tank-e.amount,0):0;
@@ -585,18 +596,19 @@ const chevSVG='<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path
 
 /* ---------- Cálculo ---------- */
 function compute(trips){
-  const n=state.people.length;let total=0,leftover=0;
+  const n=state.people.length;let total=0,leftover=0,pending=0;
   const shared={},outlay={},extra={};   // shared: entra na divisão · outlay: dinheiro que saiu do bolso · extra: sobra de tanque, não dividida
   state.people.forEach(p=>{shared[p.id]=0;outlay[p.id]=0;extra[p.id]=0;});
   trips.forEach(t=>t.expenses.forEach(e=>{
     total+=e.amount;
+    if(fuelPending(e))pending++;
     if(shared[e.payer]!==undefined){shared[e.payer]+=e.amount;outlay[e.payer]+=e.amount;}
     const lo=leftoverDebt(e);
     if(lo>0&&shared[e.payer]!==undefined&&shared[e.keeper]!==undefined){leftover+=lo;outlay[e.payer]+=lo;extra[e.payer]+=lo;extra[e.keeper]-=lo;}
   }));
   const perHead=n>0?total/n:0;
   const net=state.people.map(p=>({name:p.name,paid:outlay[p.id],net:shared[p.id]-perHead+extra[p.id]}));
-  return {total,perHead,net,leftover};
+  return {total,perHead,net,leftover,pending};
 }
 function settleUp(net){
   const eps=.005;
@@ -614,7 +626,7 @@ function settleUp(net){
 /* ---------- Render ---------- */
 function renderCluster(){
   const trips=tripsInPeriod();
-  const {total,perHead,net,leftover}=compute(trips);const tr=settleUp(net);
+  const {total,perHead,net,leftover,pending}=compute(trips);const tr=settleUp(net);
   let h=`<div class="seg pseg">
       <button data-period="all" class="${period.mode==='all'?'on':''}">Tudo</button>
       <button data-period="month" class="${period.mode==='month'?'on':''}">Mês</button>
@@ -627,6 +639,9 @@ function renderCluster(){
   h+= (total>0&&state.people.length>1)
     ? `<p class="split-note">${money.format(perHead)} por pessoa · entre ${state.people.length}${leftover>0?` · + ${money.format(leftover)} de sobra de tanque, sem dividir`:''}</p>`
     : `<p class="split-note">&nbsp;</p>`;
+  if(pending>0){
+    h+=`<div class="warnbar">${pending===1?"1 abastecimento ainda sem km e média":pending+" abastecimentos ainda sem km e média"} — o acerto muda quando preencher.</div>`;
+  }
   if(total>0&&state.people.length>1){
     h+=`<div class="bd">`+net.map(p=>{
       const s=p.net,cls=Math.abs(s)<.005?"neu":(s>0?"pos":"neg");
@@ -655,9 +670,38 @@ function renderCfg(){
   document.getElementById("cats").innerHTML=state.cats.map((c,i)=>`<span class="chip"><input value="${esc(c)}" data-cid="${i}" aria-label="Categoria"><button class="x" data-del-cat="${i}" aria-label="Remover">×</button></span>`).join("");
 }
 const catOpts=sel=>state.cats.map(c=>`<option ${c===sel?"selected":""}>${esc(c)}</option>`).join("");
-const payerOpts=()=>state.people.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("");
+const peopleOpts=sel=>state.people.map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(p.name)}</option>`).join("");
 const otherThan=pid=>(state.people.find(p=>p.id!==pid)||state.people[0]||{}).id;
-const keeperOpts=payerId=>{const sel=otherThan(payerId);return state.people.map(p=>`<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(p.name)}</option>`).join("");};
+const inval=v=>(v===undefined||v===null||v==="")?"":String(v).replace(".",",");
+const pencilSVG='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>';
+
+const fuelFields=v=>`
+  <div class="row two">
+    <label class="field"><span>Categoria</span><select class="f-cat">${catOpts(v.cat)}</select></label>
+    <label class="field"><span>Quem pagou</span><select class="f-payer">${peopleOpts(v.payer)}</select></label>
+  </div>
+  <div class="row two">
+    <label class="field"><span>Total pago (R$)</span><input class="f-tank" inputmode="decimal" placeholder="0,00" value="${esc(inval(v.tank))}"></label>
+    <label class="field"><span>Litros</span><input class="f-liters" inputmode="decimal" placeholder="0" value="${esc(inval(v.liters))}"></label>
+  </div>
+  <div class="row two">
+    <label class="field"><span>Km rodados</span><input class="f-km" inputmode="decimal" placeholder="depois da viagem" value="${esc(inval(v.km))}"></label>
+    <label class="field"><span>Média km/L</span><input class="f-kpl" inputmode="decimal" placeholder="depois da viagem" value="${esc(inval(v.kmPerL))}"></label>
+  </div>
+  <div class="readout idle"><span class="k">custo</span><span class="liters"></span><span class="cost">—</span></div>
+  <label class="field"><span>Sobra fica com</span><select class="f-keeper">${peopleOpts(v.keeper)}</select></label>
+  <div class="readout sobra-ro" hidden><span class="k">sobra</span><span class="liters who"></span><span class="cost"></span></div>`;
+
+const flatFields=v=>{
+  const parts=(v.parts&&v.parts.length)?v.parts:[v.amount===undefined?"":v.amount];
+  return `<div class="row two">
+    <label class="field"><span>Categoria</span><select class="f-cat">${catOpts(v.cat)}</select></label>
+    <label class="field"><span>Quem pagou</span><select class="f-payer">${peopleOpts(v.payer)}</select></label>
+  </div>
+  <label class="field"><span>Valor</span></label>
+  <div class="vlines">${parts.map(p=>`<div class="vline"><input class="f-val" inputmode="decimal" placeholder="R$ 0,00" aria-label="Valor" value="${esc(inval(p))}"><button class="vx" data-rmval type="button" aria-label="Remover valor" hidden>×</button></div>`).join("")}</div>
+  <div class="vadd"><button class="btn-add" data-addval type="button">+ valor</button><span class="vsum num"></span></div>`;
+};
 const fuelCat=()=>state.cats.find(c=>/combust|gasolin|alcool|álcool|etanol/i.test(c))||state.cats[0];
 
 function renderTrips(){
@@ -669,47 +713,41 @@ function renderTrips(){
     const open=isOpen(t.id);
 
     const list=t.expenses.length?t.expenses.map(e=>{
+      const key=t.id+":"+e.id;
+      if(editing===key){
+        return `<div class="addwrap editwrap" data-edit="${key}">
+          ${e.type==="fuel"?fuelFields(e):flatFields(e)}
+          <div class="row two" style="margin-bottom:0">
+            <button class="btn" type="button" data-cancel-edit>Cancelar</button>
+            <button class="btn btn-primary" data-save-exp="${key}">Salvar</button>
+          </div>
+        </div>`;
+      }
       const payer=state.people.find(p=>p.id===e.payer);const pname=payer?esc(payer.name):"—";
       let meta,payerTag="",sobra="";
       if(e.type==="fuel"){
-        meta=`${fmt(e.km)} km · ${fmt(e.kmPerL)} km/L · ${money.format(e.pricePerL)}/L`;payerTag=` · ${pname}`;
-        const lo=leftoverOf(e);
-        if(e.tank>0){
-          const keeper=state.people.find(p=>p.id===e.keeper);
+        const ppl=pricePerLOf(e),bits=[];
+        if(e.km>0)bits.push(`${fmt(e.km)} km`);
+        if(e.kmPerL>0)bits.push(`${fmt(e.kmPerL)} km/L`);
+        if(e.liters>0)bits.push(`${fmt(e.liters)} L`);
+        if(ppl>0)bits.push(`${money.format(ppl)}/L`);
+        meta=bits.join(" · ");payerTag=` · ${pname}`;
+        if(fuelPending(e)){
+          sobra=`<div class="meta pend">abasteceu ${money.format(e.tank||0)} · falta km e média</div>`;
+        }else if(e.tank>0){
+          const lo=leftoverOf(e),keeper=state.people.find(p=>p.id===e.keeper);
           const who=lo>0?(e.keeper===e.payer?"fica com quem pagou":`${keeper?esc(keeper.name):"—"} deve inteira`):"sem sobra";
           sobra=`<div class="meta sobra">abasteceu ${money.format(e.tank)} · sobra ${money.format(lo)} · ${who}</div>`;
         }
       }
       else if(e.parts&&e.parts.length>1){meta=e.parts.map(v=>money.format(v)).join(" + ");payerTag=` · ${pname}`;}
       else{meta=`pago por ${pname}`;}
-      return `<div class="exp"><div class="body"><div class="cat">${esc(e.cat)}</div><div class="meta">${meta}${payerTag}</div>${sobra}</div><span class="val num">${money.format(e.amount)}</span><button class="del" data-del-exp="${t.id}:${e.id}" aria-label="Remover">×</button></div>`;
+      return `<div class="exp ${fuelPending(e)?'is-pend':''}"><div class="body"><div class="cat">${esc(e.cat)}</div><div class="meta">${meta}${payerTag}</div>${sobra}</div><span class="val num">${money.format(e.amount)}</span><button class="ed" data-edit-exp="${key}" aria-label="Editar">${pencilSVG}</button><button class="del" data-del-exp="${key}" aria-label="Remover">×</button></div>`;
     }).join(""):`<div class="exp-empty">Nenhuma despesa lançada.</div>`;
 
-    const fuelForm=`
-      <div class="row two">
-        <label class="field"><span>Categoria</span><select class="f-cat">${catOpts(fuelCat())}</select></label>
-        <label class="field"><span>Quem pagou</span><select class="f-payer">${payerOpts()}</select></label>
-      </div>
-      <div class="row three">
-        <label class="field"><span>Km rodados</span><input class="f-km" inputmode="decimal" placeholder="0"></label>
-        <label class="field"><span>Média km/L</span><input class="f-kpl" inputmode="decimal" placeholder="0" value="${esc(state.lastFuel.kmPerL)}"></label>
-        <label class="field"><span>Preço R$/L</span><input class="f-ppl" inputmode="decimal" placeholder="0,00" value="${esc(state.lastFuel.pricePerL)}"></label>
-      </div>
-      <div class="readout idle"><span class="k">custo</span><span class="liters"></span><span class="cost">—</span></div>
-      <div class="row two">
-        <label class="field"><span>Abasteceu (R$)</span><input class="f-tank" inputmode="decimal" placeholder="opcional"></label>
-        <label class="field"><span>Sobra fica com</span><select class="f-keeper">${keeperOpts(state.people[0]&&state.people[0].id)}</select></label>
-      </div>
-      <div class="readout sobra-ro" hidden><span class="k">sobra</span><span class="liters who"></span><span class="cost"></span></div>`;
-
-    const flatForm=`
-      <div class="row two">
-        <label class="field"><span>Categoria</span><select class="f-cat">${catOpts()}</select></label>
-        <label class="field"><span>Quem pagou</span><select class="f-payer">${payerOpts()}</select></label>
-      </div>
-      <label class="field"><span>Valor</span></label>
-      <div class="vlines"><div class="vline"><input class="f-val" inputmode="decimal" placeholder="R$ 0,00" aria-label="Valor"><button class="vx" data-rmval type="button" aria-label="Remover valor" hidden>×</button></div></div>
-      <div class="vadd"><button class="btn-add" data-addval type="button">+ valor</button><span class="vsum num"></span></div>`;
+    const first=state.people[0]?state.people[0].id:"";
+    const fuelForm=fuelFields({cat:fuelCat(),payer:first,kmPerL:state.lastFuel.kmPerL,keeper:otherThan(first)});
+    const flatForm=flatFields({payer:first,parts:[""]});
 
     return `<div class="card trip ${open?'':'collapsed'}">
       <div class="trip-head" data-toggle="${t.id}">
@@ -747,18 +785,46 @@ function renderTrips(){
 
 function updateReadout(form){
   const ro=form.querySelector(".readout");if(!ro)return;
-  const km=num(form.querySelector(".f-km").value),kpl=num(form.querySelector(".f-kpl").value),ppl=num(form.querySelector(".f-ppl").value);
-  let cost=null;
-  if(km&&kpl&&ppl&&kpl>0){const liters=km/kpl;cost=liters*ppl;ro.classList.remove("idle");ro.querySelector(".liters").textContent=liters.toLocaleString("pt-BR",{maximumFractionDigits:1})+" L";ro.querySelector(".cost").textContent=money.format(cost);}
-  else{ro.classList.add("idle");ro.querySelector(".liters").textContent="";ro.querySelector(".cost").textContent="—";}
+  const tank=brl(form.querySelector(".f-tank").value),liters=num(form.querySelector(".f-liters").value);
+  const km=num(form.querySelector(".f-km").value),kpl=num(form.querySelector(".f-kpl").value);
+  const ppl=(tank>0&&liters>0)?tank/liters:null;
+  const cost=(ppl!==null&&km>0&&kpl>0)?(km/kpl)*ppl:null;
+  if(cost!==null){
+    ro.classList.remove("idle");
+    ro.querySelector(".liters").textContent=`${money.format(ppl)}/L · ${(km/kpl).toLocaleString("pt-BR",{maximumFractionDigits:1})} L usados`;
+    ro.querySelector(".cost").textContent=money.format(cost);
+  }else{
+    ro.classList.add("idle");
+    ro.querySelector(".liters").textContent=ppl!==null?`${money.format(ppl)}/L · falta km e média`:"";
+    ro.querySelector(".cost").textContent="—";
+  }
   const sro=form.querySelector(".sobra-ro");if(!sro)return;
-  const tank=brl(form.querySelector(".f-tank").value);
   if(!(tank>0)||cost===null){sro.hidden=true;return;}
   const lo=Math.max(tank-cost,0),payer=form.querySelector(".f-payer").value,keeper=form.querySelector(".f-keeper").value;
   const kp=state.people.find(p=>p.id===keeper);
   sro.hidden=false;
   sro.querySelector(".cost").textContent=money.format(lo);
   sro.querySelector(".who").textContent=lo<=0?"nada sobrou":(keeper===payer?"fica com quem pagou, nada a acertar":`${kp?kp.name:"—"} deve inteira`);
+}
+// lê os campos de um formulário (novo ou em edição) e devolve a despesa, ou null se algo estiver faltando
+function readExpense(wrap,kind){
+  const cat=wrap.querySelector(".f-cat").value,payer=wrap.querySelector(".f-payer").value;
+  if(kind!=="fuel"){
+    const vals=[...wrap.querySelectorAll(".f-val")].map(i=>brl(i.value)).filter(v=>v&&v>0);
+    if(!vals.length){toast("Informe ao menos um valor.");return null;}
+    return {type:"flat",cat,payer,amount:vals.reduce((a,b)=>a+b,0),parts:vals};
+  }
+  const tank=brl(wrap.querySelector(".f-tank").value),liters=num(wrap.querySelector(".f-liters").value);
+  const km=num(wrap.querySelector(".f-km").value),kpl=num(wrap.querySelector(".f-kpl").value);
+  if(!(tank>0)){toast("Informe quanto pagou no posto.");return null;}
+  if(!(liters>0)){toast("Informe quantos litros abasteceu.");return null;}
+  if((km>0)!==(kpl>0)){toast("Preencha km rodados e média juntos, ou deixe os dois em branco.");return null;}
+  const e={type:"fuel",cat,payer,tank,liters,keeper:wrap.querySelector(".f-keeper").value,amount:0};
+  if(km>0&&kpl>0){e.km=km;e.kmPerL=kpl;e.amount=fuelCost(km,kpl,tank/liters);}
+  return e;
+}
+function rememberFuel(e){
+  if(e.kmPerL>0){state.lastFuel={kmPerL:String(e.kmPerL).replace(".",",")};putSettings();}
 }
 function updateFlatSum(wrap){
   const lines=wrap.querySelector(".vlines");if(!lines)return;
@@ -846,7 +912,7 @@ document.addEventListener("input",e=>{
   if(el.dataset.cid!==undefined&&el.dataset.cid!==""){state.cats[+el.dataset.cid]=el.value;debounce("settings",putSettings);}
   if(el.dataset.tname){const tr=state.trips.find(x=>x.id===el.dataset.tname);if(tr){tr.name=el.value;debounce("trip:"+tr.id,()=>putTrip(tr));}}
   if(el.dataset.tdate){const tr=state.trips.find(x=>x.id===el.dataset.tdate);if(tr){tr.dateISO=el.value;debounce("trip:"+tr.id,()=>putTrip(tr));}}
-  if(el.classList.contains("f-km")||el.classList.contains("f-kpl")||el.classList.contains("f-ppl")||el.classList.contains("f-tank")){updateReadout(el.closest(".addwrap"));}
+  if(el.classList.contains("f-km")||el.classList.contains("f-kpl")||el.classList.contains("f-tank")||el.classList.contains("f-liters")){updateReadout(el.closest(".addwrap"));}
   if(el.classList.contains("f-val")){updateFlatSum(el.closest(".addwrap"));}
 });
 
@@ -930,24 +996,24 @@ document.addEventListener("click",async e=>{
   }
   if(t.dataset.add){
     const wrap=t.closest(".addwrap"),tid=t.dataset.add,tr=state.trips.find(x=>x.id===tid);
-    const cat=wrap.querySelector(".f-cat").value,payer=wrap.querySelector(".f-payer").value;
-    if((mode[tid]||"fuel")==="fuel"){
-      const km=num(wrap.querySelector(".f-km").value),kpl=num(wrap.querySelector(".f-kpl").value),ppl=num(wrap.querySelector(".f-ppl").value);
-      if(!km||km<=0){toast("Informe os km rodados.");return;}
-      if(!kpl||kpl<=0){toast("Informe a média de km/L.");return;}
-      if(!ppl||ppl<=0){toast("Informe o preço do litro.");return;}
-      const tankRaw=wrap.querySelector(".f-tank").value.trim(),tank=brl(tankRaw);
-      if(tankRaw&&!(tank>0)){toast("Valor abastecido inválido.");return;}
-      const exp={id:uid(),type:"fuel",cat,payer,km,kmPerL:kpl,pricePerL:ppl,amount:fuelCost(km,kpl,ppl)};
-      if(tank>0){exp.tank=tank;exp.keeper=wrap.querySelector(".f-keeper").value;}
-      tr.expenses.push(exp);
-      state.lastFuel={kmPerL:String(kpl).replace(".",","),pricePerL:String(ppl).replace(".",",")};
-      putSettings();
-    }else{
-      const vals=[...wrap.querySelectorAll(".f-val")].map(i=>brl(i.value)).filter(v=>v&&v>0);
-      if(!vals.length){toast("Informe ao menos um valor.");return;}
-      tr.expenses.push({id:uid(),type:"flat",cat,payer,amount:vals.reduce((a,b)=>a+b,0),parts:vals});
-    }
+    const exp=readExpense(wrap,mode[tid]||"fuel");
+    if(!exp)return;
+    exp.id=uid();
+    tr.expenses.push(exp);
+    if(exp.type==="fuel")rememberFuel(exp);
+    putTrip(tr);renderAll();return;
+  }
+  if(t.dataset.editExp){editing=t.dataset.editExp;renderTrips();return;}
+  if(t.dataset.cancelEdit!==undefined){editing=null;renderTrips();return;}
+  if(t.dataset.saveExp){
+    const [tid,eid]=t.dataset.saveExp.split(":");
+    const tr=state.trips.find(x=>x.id===tid),old=tr&&tr.expenses.find(x=>x.id===eid);
+    if(!old)return;
+    const next=readExpense(t.closest(".addwrap"),old.type);
+    if(!next)return;
+    tr.expenses[tr.expenses.indexOf(old)]={id:eid,...next};
+    editing=null;
+    if(next.type==="fuel")rememberFuel(next);
     putTrip(tr);renderAll();return;
   }
 });
@@ -957,7 +1023,8 @@ document.addEventListener("change",e=>{
   if(el.dataset.tdate){const tr=state.trips.find(x=>x.id===el.dataset.tdate);if(tr){tr.dateISO=el.value;debounce("trip:"+tr.id,()=>putTrip(tr));renderCluster();}}
   if(el.classList.contains("f-payer")||el.classList.contains("f-keeper")){
     const wrap=el.closest(".addwrap"),keeper=wrap.querySelector(".f-keeper");
-    if(el.classList.contains("f-payer")&&keeper&&keeper.value===el.value)keeper.value=otherThan(el.value);
+    // só no formulário novo: numa edição, "sobra fica com quem pagou" pode ser intencional
+    if(!wrap.dataset.edit&&el.classList.contains("f-payer")&&keeper&&keeper.value===el.value)keeper.value=otherThan(el.value);
     updateReadout(wrap);
   }
 });
